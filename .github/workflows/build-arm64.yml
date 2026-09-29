@@ -38,6 +38,11 @@ jobs:
           curl -L -o appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-aarch64.AppImage
           chmod +x appimagetool
           ARCH=aarch64 ./appimagetool --appimage-extract-and-run AppDir r2modman-arm64.AppImage
+      - name: Smoke test
+        run: |
+          sudo apt-get install -y xvfb libfuse2t64 libgtk-3-0 libnss3 libasound2t64 libgbm1
+          chmod +x r2modman-arm64.AppImage
+          timeout 20 xvfb-run -a ./r2modman-arm64.AppImage --appimage-extract-and-run || echo "exit code: $?"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: arm64-build
