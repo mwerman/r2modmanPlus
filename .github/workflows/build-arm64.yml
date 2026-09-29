@@ -1,4 +1,4 @@
-name: Build arm64
+name: r2modman Flatpak arm64
 on: workflow_dispatch
 permissions:
   contents: write
@@ -8,42 +8,67 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v2
-      - run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+      - run: sudo apt-get update && sudo apt-get install -y libarchive-tools flatpak flatpak-builder
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec quasar build -m electron -T linux
         continue-on-error: true
-      - name: Make AppImage
+      - name: Write manifest
         run: |
-          set -e
-          APP=dist/electron/Packaged/linux-arm64-unpacked
-          ls "$APP"
-          mkdir -p AppDir/usr/lib/r2modman
-          cp -r "$APP"/. AppDir/usr/lib/r2modman/
-          cp src/assets/icon/256x256.png AppDir/r2modman.png
-          cat > AppDir/r2modman.desktop <<'EOF'
-          [Desktop Entry]
-          Type=Application
-          Name=r2modman
-          Exec=r2modman
-          Icon=r2modman
-          Categories=Game;
+          cat > flatpak-r2modman.yml <<'EOF'
+          app-id: local.dev.R2modman
+          runtime: org.freedesktop.Platform
+          runtime-version: '24.08'
+          sdk: org.freedesktop.Sdk
+          base: org.electronjs.Electron2.BaseApp
+          base-version: '24.08'
+          command: r2modman-launch
+          finish-args:
+            - --share=ipc
+            - --share=network
+            - --socket=x11
+            - --socket=wayland
+            - --socket=pulseaudio
+            - --device=dri
+            - --filesystem=~/.local/share/Steam
+            - --filesystem=~/.steam
+            - --filesystem=/run/media
+          modules:
+            - name: r2modman
+              buildsystem: simple
+              build-commands:
+                - mkdir -p /app/r2modman
+                - cp -r app/. /app/r2modman/
+                - install -Dm755 r2modman-launch /app/bin/r2modman-launch
+                - install -Dm644 icon.png /app/share/icons/hicolor/256x256/apps/local.dev.R2modman.png
+                - install -Dm644 r2modman.desktop /app/share/applications/local.dev.R2modman.desktop
+              sources:
+                - type: dir
+                  path: dist/electron/Packaged/linux-arm64-unpacked
+                  dest: app
+                - type: script
+                  dest-filename: r2modman-launch
+                  commands:
+                    - exec zypak-wrapper /app/r2modman/r2modman "$@"
+                - type: file
+                  path: src/assets/icon/256x256.png
+                  dest-filename: icon.png
+                - type: inline
+                  dest-filename: r2modman.desktop
+                  contents: |
+                    [Desktop Entry]
+                    Type=Application
+                    Name=r2modman
+                    Exec=r2modman-launch
+                    Icon=local.dev.R2modman
+                    Categories=Game;
           EOF
-          cat > AppDir/AppRun <<'EOF'
-          #!/bin/bash
-          HERE="$(dirname "$(readlink -f "$0")")"
-          exec "$HERE/usr/lib/r2modman/r2modman" --no-sandbox "$@"
-          EOF
-          chmod +x AppDir/AppRun
-          curl -L -o appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-aarch64.AppImage
-          chmod +x appimagetool
-          ARCH=aarch64 ./appimagetool --appimage-extract-and-run AppDir r2modman-arm64.AppImage
-      - name: Smoke test
+      - name: Build flatpak
         run: |
-          sudo apt-get install -y xvfb libfuse2t64 libgtk-3-0 libnss3 libasound2t64 libgbm1
-          chmod +x r2modman-arm64.AppImage
-          timeout 20 xvfb-run -a ./r2modman-arm64.AppImage --appimage-extract-and-run || echo "exit code: $?"
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak-builder --user --arch=aarch64 --force-clean --disable-rofiles-fuse --install-deps-from=flathub --repo=repo build-dir flatpak-r2modman.yml
+          flatpak build-bundle --arch=aarch64 --runtime-repo=https://dl.flathub.org/repo/flathub.flatpakrepo repo r2modman-arm64.flatpak local.dev.R2modman
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: arm64-build
-          files: r2modman-arm64.AppImage
+          tag_name: r2modman-flatpak-arm64
+          files: r2modman-arm64.flatpak
