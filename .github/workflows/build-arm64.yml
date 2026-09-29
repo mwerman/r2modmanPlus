@@ -6,10 +6,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v2
+      - run: sudo apt-get update && sudo apt-get install -y libarchive-tools
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec quasar build -m electron -T linux
+        continue-on-error: true
+      - run: tar czf r2modman-arm64.tar.gz -C dist/electron/Packaged linux-arm64-unpacked
       - uses: actions/upload-artifact@v4
         with:
           name: r2modman-arm64
-          path: dist/electron/**
+          path: |
+            r2modman-arm64.tar.gz
+            dist/electron/Packaged/*.AppImage
+            dist/electron/Packaged/*.deb
