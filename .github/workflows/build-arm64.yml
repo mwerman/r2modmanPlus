@@ -1,5 +1,7 @@
 name: Build arm64
 on: workflow_dispatch
+permissions:
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
@@ -11,11 +13,32 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec quasar build -m electron -T linux
         continue-on-error: true
-      - run: tar czf r2modman-arm64.tar.gz -C dist/electron/Packaged linux-arm64-unpacked
-      - uses: actions/upload-artifact@v4
+      - name: Make AppImage
+        run: |
+          set -e
+          APP=dist/electron/Packaged/linux-arm64-unpacked
+          ls "$APP"
+          mkdir -p AppDir/usr/lib/r2modman
+          cp -r "$APP"/. AppDir/usr/lib/r2modman/
+          cp src/assets/icon/256x256.png AppDir/r2modman.png
+          cat > AppDir/r2modman.desktop <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=r2modman
+          Exec=r2modman
+          Icon=r2modman
+          Categories=Game;
+          EOF
+          cat > AppDir/AppRun <<'EOF'
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/lib/r2modman/r2modman" --no-sandbox "$@"
+          EOF
+          chmod +x AppDir/AppRun
+          curl -L -o appimagetool https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-aarch64.AppImage
+          chmod +x appimagetool
+          ARCH=aarch64 ./appimagetool --appimage-extract-and-run AppDir r2modman-arm64.AppImage
+      - uses: softprops/action-gh-release@v2
         with:
-          name: r2modman-arm64
-          path: |
-            r2modman-arm64.tar.gz
-            dist/electron/Packaged/*.AppImage
-            dist/electron/Packaged/*.deb
+          tag_name: arm64-build
+          files: r2modman-arm64.AppImage
