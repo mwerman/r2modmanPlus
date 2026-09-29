@@ -1,0 +1,15 @@
+name: Build arm64
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec quasar build -m electron -T linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: r2modman-arm64
+          path: dist/electron/**
